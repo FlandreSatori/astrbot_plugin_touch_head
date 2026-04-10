@@ -1,0 +1,15 @@
+# Python virtual env
+.venv/
+venv/
+
+# AstrBot runtime files
+.astrbot
+astrbot.lock
+
+# Archives and temp
+*.zip
+*.log
+__pycache__/
+*.pyc
+
+.trae/documents/plan_20260214_062419.md

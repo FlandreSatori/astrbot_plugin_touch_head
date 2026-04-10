@@ -1,0 +1,41 @@
+{
+  "trigger": {
+    "description": "触发词",
+    "type": "text",
+    "default": "摸摸",
+    "hint": "发送该词触发摸头 GIF，例如：摸摸"
+  },
+  "interval": {
+    "description": "摸头速度（帧间隔）",
+    "type": "float",
+    "default": 0.06,
+    "hint": "控制摸头动画的快慢，数值越小越快。建议范围：0.02 ~ 1.0",
+    "slider": {
+      "min": 0.02,
+      "max": 1.0,
+      "step": 0.01
+    }
+  },
+  "avatar_offset_x": {
+    "description": "头像水平偏移",
+    "type": "int",
+    "default": 0,
+    "hint": "控制头像在画布中的左右偏移，负数左移，正数右移",
+    "slider": {
+      "min": -60,
+      "max": 60,
+      "step": 1
+    }
+  },
+  "avatar_offset_y": {
+    "description": "头像垂直偏移",
+    "type": "int",
+    "default": 0,
+    "hint": "控制头像在画布中的上下偏移，负数上移，正数下移",
+    "slider": {
+      "min": -60,
+      "max": 60,
+      "step": 1
+    }
+  }
+}
