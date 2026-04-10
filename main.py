@@ -24,6 +24,8 @@ DEFAULT_CONFIG = {
     "avatar_anchor": "center",
     "avatar_scale": 1.0,
     "squish": 125,
+    "overflow_right": True,
+    "overflow_bottom": True,
 }
 
 QQ_AVATAR_URLS = [
@@ -123,6 +125,8 @@ class PetPetPlugin(Star):
         except Exception:
             squish = DEFAULT_CONFIG["squish"]
         squish = max(100, min(300, squish))
+        overflow_right = self._to_bool(self._config_get("overflow_right", DEFAULT_CONFIG["overflow_right"]))
+        overflow_bottom = self._to_bool(self._config_get("overflow_bottom", DEFAULT_CONFIG["overflow_bottom"]))
         return {
             "trigger": trigger,
             "interval": interval,
@@ -131,7 +135,16 @@ class PetPetPlugin(Star):
             "avatar_anchor": anchor,
             "avatar_scale": avatar_scale,
             "squish": squish,
+            "overflow_right": overflow_right,
+            "overflow_bottom": overflow_bottom,
         }
+
+    @staticmethod
+    def _to_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        return text in {"1", "true", "on", "yes", "y", "开", "开启", "允许", "是"}
 
     @staticmethod
     def _normalize_anchor(value: Any) -> str:
@@ -170,9 +183,9 @@ class PetPetPlugin(Star):
         return getattr(target, key, default)
 
     def _handle_petset(self, text: str) -> str:
-        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置|对齐|锚点|缩放|倍率|挤压|弹性)\s+(.+?)\s*$", text)
+        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置|对齐|锚点|缩放|倍率|挤压|弹性|越界)\s+(.+?)\s*$", text)
         if not m:
-            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0、.petset 对齐 居中、.petset 缩放 1.2、.petset 挤压 180"
+            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0、.petset 对齐 居中、.petset 缩放 1.2、.petset 挤压 180、.petset 越界 右 开"
         key, value = m.group(1), m.group(2).strip()
         if key == "速度":
             try:
@@ -220,6 +233,17 @@ class PetPetPlugin(Star):
             squish = max(100, min(300, squish))
             self._apply_config({"squish": squish})
             return f"已设置挤压强度为 {self._config_get('squish', DEFAULT_CONFIG['squish'])}"
+        if key == "越界":
+            mm = re.match(r"^(右边|右|下边|下)\s+(开|关|开启|关闭|允许|禁止|on|off|true|false|1|0)$", value, flags=re.IGNORECASE)
+            if not mm:
+                return "越界用法：.petset 越界 右 开 或 .petset 越界 下 关"
+            side_raw, flag_raw = mm.group(1), mm.group(2)
+            enabled = self._to_bool(flag_raw)
+            if side_raw in {"右边", "右"}:
+                self._apply_config({"overflow_right": enabled})
+                return f"已设置右边越界为：{'开' if self._to_bool(self._config_get('overflow_right', True)) else '关'}"
+            self._apply_config({"overflow_bottom": enabled})
+            return f"已设置下边越界为：{'开' if self._to_bool(self._config_get('overflow_bottom', True)) else '关'}"
         if not value:
             return "触发词不能为空。"
         self._apply_config({"trigger": value})
@@ -408,6 +432,8 @@ class PetPetPlugin(Star):
         offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"]))
         offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"]))
         anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
+        overflow_right = self._to_bool(self._config_get("overflow_right", DEFAULT_CONFIG["overflow_right"]))
+        overflow_bottom = self._to_bool(self._config_get("overflow_bottom", DEFAULT_CONFIG["overflow_bottom"]))
         base_w = int(sprite_width * avatar_scale)
         base_h = int(sprite_height * avatar_scale)
 
@@ -437,6 +463,11 @@ class PetPetPlugin(Star):
             w = int((sprite_width + offset["w"] * squish) * avatar_scale)
             h = int((sprite_height + offset["h"] * squish) * avatar_scale)
             squeezed = avatar.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
+
+            if not overflow_right:
+                x = min(x, canvas_size[0] - max(1, w))
+            if not overflow_bottom:
+                y = min(y, canvas_size[1] - max(1, h))
             
             canvas.paste(squeezed, (x, y))
             canvas = Image.alpha_composite(canvas, hand)

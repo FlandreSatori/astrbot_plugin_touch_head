@@ -65,5 +65,17 @@
       "max": 300,
       "step": 1
     }
+  },
+  "overflow_right": {
+    "description": "右边允许越界",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后头像右边不会超出画布"
+  },
+  "overflow_bottom": {
+    "description": "下边允许越界",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后头像下边不会超出画布"
   }
 }
