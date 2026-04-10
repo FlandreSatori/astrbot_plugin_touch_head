@@ -30,7 +30,7 @@
   "avatar_offset_y": {
     "description": "头像垂直偏移",
     "type": "int",
-    "default": 13,
+    "default": -13,
     "hint": "控制头像在画布中的上下偏移，负数下移，正数上移",
     "slider": {
       "min": -60,
