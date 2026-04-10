@@ -210,7 +210,9 @@ class PetPetPlugin(Star):
                 continue
             if token.startswith("y"):
                 try:
-                    opts["y_delta"] = int(float(token[1:]))
+                    # Use Cartesian axis semantics for message parameters:
+                    # +y means up, -y means down.
+                    opts["y_delta"] = -int(float(token[1:]))
                 except Exception:
                     return opts, "y 参数不合法，示例：y10 或 y-10"
                 continue
@@ -399,7 +401,8 @@ class PetPetPlugin(Star):
         sprite_height = 75
         avatar = avatar.resize((sprite_width, sprite_height), Image.Resampling.LANCZOS)
         offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"])) + int(x_delta)
-        offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"])) + int(y_delta)
+        # Convert Cartesian y (+up, -down) to image y (+down, -up).
+        offset_y = -int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"])) + int(y_delta)
         anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
         overflow_right = self._to_bool(self._config_get("overflow_right", DEFAULT_CONFIG["overflow_right"]))
         overflow_bottom = self._to_bool(self._config_get("overflow_bottom", DEFAULT_CONFIG["overflow_bottom"]))

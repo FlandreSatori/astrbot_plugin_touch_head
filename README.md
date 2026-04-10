@@ -35,6 +35,7 @@ fork 自 https://github.com/mjy1113451/touch_head
 说明：
 - 所有长期配置只能在 WebUI 中修改。
 - `x` 和 `y` 是在 WebUI 配置的基础上叠加，例如基础 `x10 y10`，消息带 `x10 y-10`，最终为 `x20 y0`。
+- 坐标方向：`+x` 向右，`+y` 向上。
 - `squish` 不支持通过消息修改。
 
 
