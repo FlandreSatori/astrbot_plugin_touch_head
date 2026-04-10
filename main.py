@@ -471,8 +471,14 @@ class PetPetPlugin(Star):
             
             canvas.paste(squeezed, (x, y))
             canvas = Image.alpha_composite(canvas, hand)
-            
-            frames.append(canvas)
+
+            # Use a dedicated transparent index to avoid per-frame palette
+            # mismatch that causes flicker/artifacts in GIF players.
+            pal = canvas.convert("P", palette=Image.Palette.ADAPTIVE, colors=255)
+            alpha = canvas.getchannel("A")
+            transparent_mask = alpha.point(lambda a: 255 if a <= 8 else 0)
+            pal.paste(255, mask=transparent_mask)
+            frames.append(pal)
         
         out_path = self.output_dir / f"petpet_{uuid.uuid4().hex}.gif"
         frames[0].save(
@@ -483,7 +489,7 @@ class PetPetPlugin(Star):
             loop=0,
             optimize=False,
             disposal=2,
-            transparency=0,
+            transparency=255,
         )
         return out_path
 
