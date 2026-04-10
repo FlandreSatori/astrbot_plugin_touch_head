@@ -387,16 +387,21 @@ class PetPetPlugin(Star):
         offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"]))
         offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"]))
         anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
-        initial_base_x = canvas_size[0] - avatar_size
-        initial_base_y = canvas_size[1] - avatar_size
+        center_base_x = (canvas_size[0] - avatar_size) // 2
+        center_base_y = (canvas_size[1] - avatar_size) // 2
+        bottom_right_base_x = canvas_size[0] - avatar_size
+        bottom_right_base_y = canvas_size[1] - avatar_size
         
-        # Benisland 风格的 5 帧按压曲线：轻压 -> 重压 -> 回弹。
-        motion_data = [
-            (0.98, 0.98, 0, 0),
-            (1.01, 0.91, -1, 4),
-            (1.06, 0.82, 1, 8),
-            (1.02, 0.92, -1, 5),
-            (0.99, 0.99, 0, 1),
+        # 对齐 benisland v1 的 getFrame 五帧参数，使用比例保证缩放时手感一致。
+        # 原始数据基准：w0=h0=98，后续帧分别为
+        # [x,y,w,h] =
+        # [0,0,98,98], [-4,12,102,86], [-12,18,110,80], [-12,12,102,86], [-4,0,98,98]
+        frame_data = [
+            (1.0, 1.0, 0.0, 0.0),
+            (102 / 98, 86 / 98, -4 / 98, 12 / 98),
+            (110 / 98, 80 / 98, -12 / 98, 18 / 98),
+            (102 / 98, 86 / 98, -12 / 98, 12 / 98),
+            (1.0, 1.0, -4 / 98, 0.0),
         ]
         
         frames = []
@@ -404,17 +409,20 @@ class PetPetPlugin(Star):
             hand = Image.open(self.assets_dir / f"frame{i}.png").convert("RGBA")
             canvas = Image.new("RGBA", canvas_size, (255, 255, 255, 0))
             
-            sx, sy, ox, oy = motion_data[i]
+            sx, sy, ox_ratio, oy_ratio = frame_data[i]
             w = int(avatar_size * sx)
             h = int(avatar_size * sy)
             squeezed = avatar.resize((w, h), Image.Resampling.LANCZOS)
 
+            ox = int(round(avatar_size * ox_ratio))
+            oy = int(round(avatar_size * oy_ratio))
+
             if anchor == "bottom_right":
-                base_x = initial_base_x
-                base_y = initial_base_y
+                base_x = bottom_right_base_x
+                base_y = bottom_right_base_y
             else:
-                base_x = (canvas_size[0] - w) // 2
-                base_y = (canvas_size[1] - h) // 2
+                base_x = center_base_x
+                base_y = center_base_y
 
             x = base_x + ox + offset_x
             y = base_y + oy + offset_y
