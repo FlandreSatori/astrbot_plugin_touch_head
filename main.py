@@ -472,7 +472,7 @@ class PetPetPlugin(Star):
             canvas.paste(squeezed, (x, y))
             canvas = Image.alpha_composite(canvas, hand)
             
-            frames.append(canvas.convert("P", palette=Image.Palette.ADAPTIVE))
+            frames.append(canvas)
         
         out_path = self.output_dir / f"petpet_{uuid.uuid4().hex}.gif"
         frames[0].save(
@@ -483,6 +483,7 @@ class PetPetPlugin(Star):
             loop=0,
             optimize=False,
             disposal=2,
+            transparency=0,
         )
         return out_path
 
