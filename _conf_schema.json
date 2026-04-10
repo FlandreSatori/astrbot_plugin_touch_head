@@ -8,7 +8,7 @@
   "interval": {
     "description": "摸头速度（帧间隔）",
     "type": "float",
-    "default": 0.02,
+    "default": 0.025,
     "hint": "控制摸头动画的快慢，数值越小越快。建议范围：0.02 ~ 0.5",
     "slider": {
       "min": 0.02,
@@ -19,7 +19,7 @@
   "avatar_offset_x": {
     "description": "头像水平偏移",
     "type": "int",
-    "default": 0,
+    "default": 10,
     "hint": "控制头像在画布中的左右偏移，负数左移，正数右移",
     "slider": {
       "min": -60,
@@ -30,7 +30,7 @@
   "avatar_offset_y": {
     "description": "头像垂直偏移",
     "type": "int",
-    "default": 0,
+    "default": 13,
     "hint": "控制头像在画布中的上下偏移，负数上移，正数下移",
     "slider": {
       "min": -60,
@@ -47,7 +47,7 @@
   "avatar_scale": {
     "description": "头像缩放倍率",
     "type": "float",
-    "default": 1.0,
+    "default": 1.4,
     "hint": "控制头像整体缩放，建议范围：0.3 ~ 3.0",
     "slider": {
       "min": 0.3,
@@ -58,7 +58,7 @@
   "squish": {
     "description": "挤压强度",
     "type": "int",
-    "default": 125,
+    "default": 100,
     "hint": "对应原版 squish，范围 100 ~ 300",
     "slider": {
       "min": 100,
@@ -75,7 +75,7 @@
   "overflow_bottom": {
     "description": "下边允许越界",
     "type": "bool",
-    "default": true,
+    "default": false,
     "hint": "关闭后头像下边不会超出画布"
   }
 }

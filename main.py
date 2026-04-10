@@ -58,16 +58,13 @@ class PetPetPlugin(Star):
         if not text:
             return
 
-        if text.startswith(".petset"):
-            if not await self._is_admin_or_owner(event):
-                yield event.plain_result("你没有权限使用该命令（仅机器人管理员或群主）。")
-                return
-            msg = self._handle_petset(text)
-            yield event.plain_result(msg)
-            return
-
         trigger = str(self._config_get("trigger", DEFAULT_CONFIG["trigger"])).strip()
         if not (text == trigger or text.startswith(trigger + " ")):
+            return
+
+        runtime_opts, parse_error = self._parse_runtime_options(text, trigger)
+        if parse_error:
+            yield event.plain_result(parse_error)
             return
 
         if not self._assets_ready():
@@ -75,7 +72,7 @@ class PetPetPlugin(Star):
             yield event.plain_result("petpet 素材缺失，请联系管理员检查插件目录下 data/petpet/frame0~4.png")
             return
 
-        target_user_id = self._resolve_target_user_id(event, text, trigger)
+        target_user_id = self._resolve_target_user_id(event, runtime_opts.get("qq"))
         if not target_user_id:
             yield event.plain_result("无法识别用户，请稍后再试。")
             return
@@ -86,7 +83,13 @@ class PetPetPlugin(Star):
             return
 
         try:
-            gif_path = self._build_petpet_gif(avatar, float(self._config_get("interval", DEFAULT_CONFIG["interval"])))
+            gif_path = self._build_petpet_gif(
+                avatar,
+                runtime_opts["interval"],
+                runtime_opts["x_delta"],
+                runtime_opts["y_delta"],
+                runtime_opts["scale"],
+            )
         except Exception:
             logger.exception("[petpet] 生成 GIF 失败")
             yield event.plain_result("生成 petpet GIF 失败，请稍后再试。")
@@ -182,72 +185,56 @@ class PetPetPlugin(Star):
             return target.get(key, default)
         return getattr(target, key, default)
 
-    def _handle_petset(self, text: str) -> str:
-        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置|对齐|锚点|缩放|倍率|挤压|弹性|越界)\s+(.+?)\s*$", text)
-        if not m:
-            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0、.petset 对齐 居中、.petset 缩放 1.2、.petset 挤压 180、.petset 越界 右 开"
-        key, value = m.group(1), m.group(2).strip()
-        if key == "速度":
-            try:
-                interval = float(value)
-            except Exception:
-                return "速度必须是数字，例如：.petset 速度 0.06"
-            if interval <= 0:
-                return "速度必须大于 0。"
-            self._apply_config({"interval": max(0.02, min(1.0, interval))})
-            return f"已设置摸头速度（帧间隔）为 {self._config_get('interval', DEFAULT_CONFIG['interval']):.3f}s"
-        if key in {"位置", "头像位置"}:
-            parts = value.split()
-            if len(parts) != 2:
-                return "位置用法：.petset 位置 x y，例如 .petset 位置 0 0"
-            try:
-                offset_x = int(float(parts[0]))
-                offset_y = int(float(parts[1]))
-            except Exception:
-                return "位置必须是数字，例如：.petset 位置 0 0"
-            self._apply_config({"avatar_offset_x": max(-60, min(60, offset_x)), "avatar_offset_y": max(-60, min(60, offset_y))})
-            return (
-                f"已设置头像位置偏移为 x={self._config_get('avatar_offset_x', 0)}, "
-                f"y={self._config_get('avatar_offset_y', 0)}"
-            )
-        if key in {"对齐", "锚点"}:
-            anchor = self._normalize_anchor(value)
-            self._apply_config({"avatar_anchor": anchor})
-            anchor_text = "右下角" if anchor == "bottom_right" else "居中"
-            return f"已设置头像对齐方式为：{anchor_text}"
-        if key in {"缩放", "倍率"}:
-            try:
-                scale = float(value)
-            except Exception:
-                return "缩放必须是数字，例如：.petset 缩放 1.2"
-            if scale <= 0:
-                return "缩放必须大于 0。"
-            scale = max(0.3, min(3.0, scale))
-            self._apply_config({"avatar_scale": scale})
-            return f"已设置头像缩放倍率为 {self._config_get('avatar_scale', 1.0):.2f}x"
-        if key in {"挤压", "弹性"}:
-            try:
-                squish = int(float(value))
-            except Exception:
-                return "挤压必须是数字，例如：.petset 挤压 180"
-            squish = max(100, min(300, squish))
-            self._apply_config({"squish": squish})
-            return f"已设置挤压强度为 {self._config_get('squish', DEFAULT_CONFIG['squish'])}"
-        if key == "越界":
-            mm = re.match(r"^(右边|右|下边|下)\s+(开|关|开启|关闭|允许|禁止|on|off|true|false|1|0)$", value, flags=re.IGNORECASE)
-            if not mm:
-                return "越界用法：.petset 越界 右 开 或 .petset 越界 下 关"
-            side_raw, flag_raw = mm.group(1), mm.group(2)
-            enabled = self._to_bool(flag_raw)
-            if side_raw in {"右边", "右"}:
-                self._apply_config({"overflow_right": enabled})
-                return f"已设置右边越界为：{'开' if self._to_bool(self._config_get('overflow_right', True)) else '关'}"
-            self._apply_config({"overflow_bottom": enabled})
-            return f"已设置下边越界为：{'开' if self._to_bool(self._config_get('overflow_bottom', True)) else '关'}"
-        if not value:
-            return "触发词不能为空。"
-        self._apply_config({"trigger": value})
-        return f"已设置触发词为：{self._config_get('trigger', DEFAULT_CONFIG['trigger'])}"
+    def _parse_runtime_options(self, text: str, trigger: str) -> tuple[dict[str, Any], Optional[str]]:
+        tail = text[len(trigger):].strip()
+        opts = {
+            "qq": None,
+            "x_delta": 0,
+            "y_delta": 0,
+            "interval": float(self._config_get("interval", DEFAULT_CONFIG["interval"])),
+            "scale": float(self._config_get("avatar_scale", DEFAULT_CONFIG["avatar_scale"])),
+        }
+        if not tail:
+            return opts, None
+
+        tokens = tail.split()
+        for token in tokens:
+            if re.fullmatch(r"@?\d{5,12}", token):
+                opts["qq"] = token.lstrip("@")
+                continue
+            if token.startswith("x"):
+                try:
+                    opts["x_delta"] = int(float(token[1:]))
+                except Exception:
+                    return opts, "x 参数不合法，示例：x10 或 x-10"
+                continue
+            if token.startswith("y"):
+                try:
+                    opts["y_delta"] = int(float(token[1:]))
+                except Exception:
+                    return opts, "y 参数不合法，示例：y10 或 y-10"
+                continue
+            if token.startswith("i"):
+                try:
+                    interval = float(token[1:])
+                except Exception:
+                    return opts, "i 参数不合法，范围：0.02 ~ 1.0，例如 i0.06"
+                if not (0.02 <= interval <= 1.0):
+                    return opts, "i 参数超出范围，需在 0.02 ~ 1.0 之间"
+                opts["interval"] = interval
+                continue
+            if token.startswith("s"):
+                try:
+                    scale = float(token[1:])
+                except Exception:
+                    return opts, "s 参数不合法，范围：0.3 ~ 3.0，例如 s1.5"
+                if not (0.3 <= scale <= 3.0):
+                    return opts, "s 参数超出范围，需在 0.3 ~ 3.0 之间"
+                opts["scale"] = scale
+                continue
+            return opts, "参数格式错误。支持：qq号 x y i s，例如：摸摸 123456 x10 y-10 i0.02 s1.5"
+
+        return opts, None
 
     async def _is_admin_or_owner(self, event: AstrMessageEvent) -> bool:
         sender = getattr(getattr(event, "message_obj", None), "sender", None)
@@ -268,8 +255,7 @@ class PetPetPlugin(Star):
                     continue
         return False
 
-    def _resolve_target_user_id(self, event: AstrMessageEvent, text: str, trigger: str) -> Optional[str]:
-        explicit_uid = self._extract_explicit_qq_uid(text, trigger)
+    def _resolve_target_user_id(self, event: AstrMessageEvent, explicit_uid: Optional[str]) -> Optional[str]:
         if explicit_uid:
             return explicit_uid
 
@@ -299,19 +285,6 @@ class PetPetPlugin(Star):
         if sender_id:
             return str(sender_id)
         
-        return None
-
-    def _extract_explicit_qq_uid(self, text: str, trigger: str) -> Optional[str]:
-        if not text.startswith(trigger):
-            return None
-
-        tail = text[len(trigger):].strip()
-        if not tail:
-            return None
-
-        m = re.fullmatch(r"@?\s*(\d{5,12})", tail)
-        if m:
-            return m.group(1)
         return None
 
     def _extract_reply_uid(self, raw: Any) -> Optional[str]:
@@ -414,13 +387,9 @@ class PetPetPlugin(Star):
                     return None
         return None
 
-    def _build_petpet_gif(self, avatar: Image.Image, interval: float) -> Path:
+    def _build_petpet_gif(self, avatar: Image.Image, interval: float, x_delta: int, y_delta: int, scale_override: float) -> Path:
         canvas_size = (112, 112)
-        try:
-            avatar_scale = float(self._config_get("avatar_scale", DEFAULT_CONFIG["avatar_scale"]))
-        except Exception:
-            avatar_scale = DEFAULT_CONFIG["avatar_scale"]
-        avatar_scale = max(0.3, min(3.0, avatar_scale))
+        avatar_scale = max(0.3, min(3.0, float(scale_override)))
         try:
             squish = int(float(self._config_get("squish", DEFAULT_CONFIG["squish"])))
         except Exception:
@@ -429,8 +398,8 @@ class PetPetPlugin(Star):
         sprite_width = 75
         sprite_height = 75
         avatar = avatar.resize((sprite_width, sprite_height), Image.Resampling.LANCZOS)
-        offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"]))
-        offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"]))
+        offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"])) + int(x_delta)
+        offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"])) + int(y_delta)
         anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
         overflow_right = self._to_bool(self._config_get("overflow_right", DEFAULT_CONFIG["overflow_right"]))
         overflow_bottom = self._to_bool(self._config_get("overflow_bottom", DEFAULT_CONFIG["overflow_bottom"]))
