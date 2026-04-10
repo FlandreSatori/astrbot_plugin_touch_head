@@ -390,12 +390,13 @@ class PetPetPlugin(Star):
         initial_base_x = canvas_size[0] - avatar_size
         initial_base_y = canvas_size[1] - avatar_size
         
-        squeeze_data = [
-            (1.0, 1.0, 0, 0),
-            (1.0, 0.9, 0, 3),
-            (0.95, 0.85, 2, 5),
-            (1.0, 0.9, 0, 3),
-            (1.0, 1.0, 0, 0),
+        # Benisland 风格的 5 帧按压曲线：轻压 -> 重压 -> 回弹。
+        motion_data = [
+            (0.98, 0.98, 0, 0),
+            (1.01, 0.91, -1, 4),
+            (1.06, 0.82, 1, 8),
+            (1.02, 0.92, -1, 5),
+            (0.99, 0.99, 0, 1),
         ]
         
         frames = []
@@ -403,7 +404,7 @@ class PetPetPlugin(Star):
             hand = Image.open(self.assets_dir / f"frame{i}.png").convert("RGBA")
             canvas = Image.new("RGBA", canvas_size, (255, 255, 255, 0))
             
-            sx, sy, ox, oy = squeeze_data[i]
+            sx, sy, ox, oy = motion_data[i]
             w = int(avatar_size * sx)
             h = int(avatar_size * sy)
             squeezed = avatar.resize((w, h), Image.Resampling.LANCZOS)
