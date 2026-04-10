@@ -41,8 +41,8 @@
   "avatar_anchor": {
     "description": "头像对齐方式",
     "type": "string",
-    "default": "center",
-    "hint": "可选值：center（居中）或 bottom_right（右下角）"
+    "default": "右下角",
+    "hint": "可选值：center/居中/bottom_right/rb/右下角/右下"
   },
   "avatar_scale": {
     "description": "头像缩放倍率",

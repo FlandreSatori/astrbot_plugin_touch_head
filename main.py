@@ -387,6 +387,8 @@ class PetPetPlugin(Star):
         offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"]))
         offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"]))
         anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
+        initial_base_x = canvas_size[0] - avatar_size
+        initial_base_y = canvas_size[1] - avatar_size
         
         squeeze_data = [
             (1.0, 1.0, 0, 0),
@@ -407,8 +409,8 @@ class PetPetPlugin(Star):
             squeezed = avatar.resize((w, h), Image.Resampling.LANCZOS)
 
             if anchor == "bottom_right":
-                base_x = canvas_size[0] - w
-                base_y = canvas_size[1] - h
+                base_x = initial_base_x
+                base_y = initial_base_y
             else:
                 base_x = (canvas_size[0] - w) // 2
                 base_y = (canvas_size[1] - h) // 2
