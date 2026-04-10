@@ -21,6 +21,8 @@ DEFAULT_CONFIG = {
     "interval": 0.05,
     "avatar_offset_x": 0,
     "avatar_offset_y": 0,
+    "avatar_anchor": "center",
+    "avatar_scale": 1.0,
 }
 
 QQ_AVATAR_URLS = [
@@ -70,7 +72,7 @@ class PetPetPlugin(Star):
             yield event.plain_result("petpet 素材缺失，请联系管理员检查插件目录下 data/petpet/frame0~4.png")
             return
 
-        target_user_id = self._resolve_target_user_id(event)
+        target_user_id = self._resolve_target_user_id(event, text, trigger)
         if not target_user_id:
             yield event.plain_result("无法识别用户，请稍后再试。")
             return
@@ -109,12 +111,27 @@ class PetPetPlugin(Star):
             avatar_offset_y = DEFAULT_CONFIG["avatar_offset_y"]
         avatar_offset_x = max(-60, min(60, avatar_offset_x))
         avatar_offset_y = max(-60, min(60, avatar_offset_y))
+        anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
+        try:
+            avatar_scale = float(self._config_get("avatar_scale", DEFAULT_CONFIG["avatar_scale"]))
+        except Exception:
+            avatar_scale = DEFAULT_CONFIG["avatar_scale"]
+        avatar_scale = max(0.3, min(3.0, avatar_scale))
         return {
             "trigger": trigger,
             "interval": interval,
             "avatar_offset_x": avatar_offset_x,
             "avatar_offset_y": avatar_offset_y,
+            "avatar_anchor": anchor,
+            "avatar_scale": avatar_scale,
         }
+
+    @staticmethod
+    def _normalize_anchor(value: Any) -> str:
+        text = str(value).strip().lower()
+        if text in {"右下", "右下角", "bottom_right", "right_bottom", "rb"}:
+            return "bottom_right"
+        return "center"
 
     def _apply_config(self, cfg: dict):
         target = self.config
@@ -146,9 +163,9 @@ class PetPetPlugin(Star):
         return getattr(target, key, default)
 
     def _handle_petset(self, text: str) -> str:
-        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置)\s+(.+?)\s*$", text)
+        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置|对齐|锚点|缩放|倍率)\s+(.+?)\s*$", text)
         if not m:
-            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0"
+            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0、.petset 对齐 居中、.petset 缩放 1.2"
         key, value = m.group(1), m.group(2).strip()
         if key == "速度":
             try:
@@ -173,6 +190,21 @@ class PetPetPlugin(Star):
                 f"已设置头像位置偏移为 x={self._config_get('avatar_offset_x', 0)}, "
                 f"y={self._config_get('avatar_offset_y', 0)}"
             )
+        if key in {"对齐", "锚点"}:
+            anchor = self._normalize_anchor(value)
+            self._apply_config({"avatar_anchor": anchor})
+            anchor_text = "右下角" if anchor == "bottom_right" else "居中"
+            return f"已设置头像对齐方式为：{anchor_text}"
+        if key in {"缩放", "倍率"}:
+            try:
+                scale = float(value)
+            except Exception:
+                return "缩放必须是数字，例如：.petset 缩放 1.2"
+            if scale <= 0:
+                return "缩放必须大于 0。"
+            scale = max(0.3, min(3.0, scale))
+            self._apply_config({"avatar_scale": scale})
+            return f"已设置头像缩放倍率为 {self._config_get('avatar_scale', 1.0):.2f}x"
         if not value:
             return "触发词不能为空。"
         self._apply_config({"trigger": value})
@@ -197,7 +229,11 @@ class PetPetPlugin(Star):
                     continue
         return False
 
-    def _resolve_target_user_id(self, event: AstrMessageEvent) -> Optional[str]:
+    def _resolve_target_user_id(self, event: AstrMessageEvent, text: str, trigger: str) -> Optional[str]:
+        explicit_uid = self._extract_explicit_qq_uid(text, trigger)
+        if explicit_uid:
+            return explicit_uid
+
         msg_obj = getattr(event, "message_obj", None)
         chain = getattr(msg_obj, "message", None) or []
         at_uid = None
@@ -224,6 +260,19 @@ class PetPetPlugin(Star):
         if sender_id:
             return str(sender_id)
         
+        return None
+
+    def _extract_explicit_qq_uid(self, text: str, trigger: str) -> Optional[str]:
+        if not text.startswith(trigger):
+            return None
+
+        tail = text[len(trigger):].strip()
+        if not tail:
+            return None
+
+        m = re.fullmatch(r"@?\s*(\d{5,12})", tail)
+        if m:
+            return m.group(1)
         return None
 
     def _extract_reply_uid(self, raw: Any) -> Optional[str]:
@@ -328,10 +377,16 @@ class PetPetPlugin(Star):
 
     def _build_petpet_gif(self, avatar: Image.Image, interval: float) -> Path:
         canvas_size = (112, 112)
-        avatar_size = 75
+        try:
+            avatar_scale = float(self._config_get("avatar_scale", DEFAULT_CONFIG["avatar_scale"]))
+        except Exception:
+            avatar_scale = DEFAULT_CONFIG["avatar_scale"]
+        avatar_scale = max(0.3, min(3.0, avatar_scale))
+        avatar_size = max(20, int(round(75 * avatar_scale)))
         avatar = avatar.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
         offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"]))
         offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"]))
+        anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
         
         squeeze_data = [
             (1.0, 1.0, 0, 0),
@@ -350,9 +405,16 @@ class PetPetPlugin(Star):
             w = int(avatar_size * sx)
             h = int(avatar_size * sy)
             squeezed = avatar.resize((w, h), Image.Resampling.LANCZOS)
-            
-            x = (canvas_size[0] - w) // 2 + ox + offset_x
-            y = (canvas_size[1] - h) // 2 + oy + offset_y
+
+            if anchor == "bottom_right":
+                base_x = canvas_size[0] - w
+                base_y = canvas_size[1] - h
+            else:
+                base_x = (canvas_size[0] - w) // 2
+                base_y = (canvas_size[1] - h) // 2
+
+            x = base_x + ox + offset_x
+            y = base_y + oy + offset_y
             
             canvas.paste(squeezed, (x, y))
             canvas = Image.alpha_composite(canvas, hand)
