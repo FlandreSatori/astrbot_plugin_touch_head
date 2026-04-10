@@ -234,7 +234,10 @@ class PetPetPlugin(Star):
                     return opts, "s 参数超出范围，需在 0.3 ~ 3.0 之间"
                 opts["scale"] = scale
                 continue
-            return opts, "参数格式错误。支持：qq号 x y i s，例如：摸摸 123456 x10 y-10 i0.02 s1.5"
+
+            # Ignore unknown tokens (e.g. rendered @昵称 text),
+            # actual @ mention resolution relies on message segments.
+            continue
 
         return opts, None
 
