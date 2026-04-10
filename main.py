@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     "avatar_offset_y": 0,
     "avatar_anchor": "center",
     "avatar_scale": 1.0,
+    "squish": 125,
 }
 
 QQ_AVATAR_URLS = [
@@ -117,6 +118,11 @@ class PetPetPlugin(Star):
         except Exception:
             avatar_scale = DEFAULT_CONFIG["avatar_scale"]
         avatar_scale = max(0.3, min(3.0, avatar_scale))
+        try:
+            squish = int(float(self._config_get("squish", DEFAULT_CONFIG["squish"])))
+        except Exception:
+            squish = DEFAULT_CONFIG["squish"]
+        squish = max(100, min(300, squish))
         return {
             "trigger": trigger,
             "interval": interval,
@@ -124,6 +130,7 @@ class PetPetPlugin(Star):
             "avatar_offset_y": avatar_offset_y,
             "avatar_anchor": anchor,
             "avatar_scale": avatar_scale,
+            "squish": squish,
         }
 
     @staticmethod
@@ -163,9 +170,9 @@ class PetPetPlugin(Star):
         return getattr(target, key, default)
 
     def _handle_petset(self, text: str) -> str:
-        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置|对齐|锚点|缩放|倍率)\s+(.+?)\s*$", text)
+        m = re.match(r"^\.petset\s+(速度|指令|位置|头像位置|对齐|锚点|缩放|倍率|挤压|弹性)\s+(.+?)\s*$", text)
         if not m:
-            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0、.petset 对齐 居中、.petset 缩放 1.2"
+            return "用法：.petset 速度 0.06、.petset 指令 揉揉、.petset 位置 0 0、.petset 对齐 居中、.petset 缩放 1.2、.petset 挤压 180"
         key, value = m.group(1), m.group(2).strip()
         if key == "速度":
             try:
@@ -205,6 +212,14 @@ class PetPetPlugin(Star):
             scale = max(0.3, min(3.0, scale))
             self._apply_config({"avatar_scale": scale})
             return f"已设置头像缩放倍率为 {self._config_get('avatar_scale', 1.0):.2f}x"
+        if key in {"挤压", "弹性"}:
+            try:
+                squish = int(float(value))
+            except Exception:
+                return "挤压必须是数字，例如：.petset 挤压 180"
+            squish = max(100, min(300, squish))
+            self._apply_config({"squish": squish})
+            return f"已设置挤压强度为 {self._config_get('squish', DEFAULT_CONFIG['squish'])}"
         if not value:
             return "触发词不能为空。"
         self._apply_config({"trigger": value})
@@ -382,26 +397,33 @@ class PetPetPlugin(Star):
         except Exception:
             avatar_scale = DEFAULT_CONFIG["avatar_scale"]
         avatar_scale = max(0.3, min(3.0, avatar_scale))
-        avatar_size = max(20, int(round(75 * avatar_scale)))
-        avatar = avatar.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
+        try:
+            squish = int(float(self._config_get("squish", DEFAULT_CONFIG["squish"])))
+        except Exception:
+            squish = DEFAULT_CONFIG["squish"]
+        squish = max(100, min(300, squish)) / 100.0
+        sprite_width = 75
+        sprite_height = 75
+        avatar = avatar.resize((sprite_width, sprite_height), Image.Resampling.LANCZOS)
         offset_x = int(self._config_get("avatar_offset_x", DEFAULT_CONFIG["avatar_offset_x"]))
         offset_y = int(self._config_get("avatar_offset_y", DEFAULT_CONFIG["avatar_offset_y"]))
         anchor = self._normalize_anchor(self._config_get("avatar_anchor", DEFAULT_CONFIG["avatar_anchor"]))
-        center_base_x = (canvas_size[0] - avatar_size) // 2
-        center_base_y = (canvas_size[1] - avatar_size) // 2
-        bottom_right_base_x = canvas_size[0] - avatar_size
-        bottom_right_base_y = canvas_size[1] - avatar_size
-        
-        # 对齐 benisland v1 的 getFrame 五帧参数，使用比例保证缩放时手感一致。
-        # 原始数据基准：w0=h0=98，后续帧分别为
-        # [x,y,w,h] =
-        # [0,0,98,98], [-4,12,102,86], [-12,18,110,80], [-12,12,102,86], [-4,0,98,98]
-        frame_data = [
-            (1.0, 1.0, 0.0, 0.0),
-            (102 / 98, 86 / 98, -4 / 98, 12 / 98),
-            (110 / 98, 80 / 98, -12 / 98, 18 / 98),
-            (102 / 98, 86 / 98, -12 / 98, 12 / 98),
-            (1.0, 1.0, -4 / 98, 0.0),
+        base_w = int(sprite_width * avatar_scale)
+        base_h = int(sprite_height * avatar_scale)
+
+        if anchor == "bottom_right":
+            sprite_x = canvas_size[0] - base_w + offset_x
+            sprite_y = canvas_size[1] - base_h + offset_y
+        else:
+            sprite_x = (canvas_size[0] - base_w) // 2 + offset_x
+            sprite_y = (canvas_size[1] - base_h) // 2 + offset_y
+
+        frame_offsets = [
+            {"x": 0, "y": 0, "w": 0, "h": 0},
+            {"x": -4, "y": 12, "w": 4, "h": -12},
+            {"x": -12, "y": 18, "w": 12, "h": -18},
+            {"x": -8, "y": 12, "w": 4, "h": -12},
+            {"x": -4, "y": 0, "w": 0, "h": 0},
         ]
         
         frames = []
@@ -409,23 +431,12 @@ class PetPetPlugin(Star):
             hand = Image.open(self.assets_dir / f"frame{i}.png").convert("RGBA")
             canvas = Image.new("RGBA", canvas_size, (255, 255, 255, 0))
             
-            sx, sy, ox_ratio, oy_ratio = frame_data[i]
-            w = int(avatar_size * sx)
-            h = int(avatar_size * sy)
-            squeezed = avatar.resize((w, h), Image.Resampling.LANCZOS)
-
-            ox = int(round(avatar_size * ox_ratio))
-            oy = int(round(avatar_size * oy_ratio))
-
-            if anchor == "bottom_right":
-                base_x = bottom_right_base_x
-                base_y = bottom_right_base_y
-            else:
-                base_x = center_base_x
-                base_y = center_base_y
-
-            x = base_x + ox + offset_x
-            y = base_y + oy + offset_y
+            offset = frame_offsets[i]
+            x = int(sprite_x + offset["x"] * (squish * 0.4))
+            y = int(sprite_y + offset["y"] * (squish * 0.9))
+            w = int((sprite_width + offset["w"] * squish) * avatar_scale)
+            h = int((sprite_height + offset["h"] * squish) * avatar_scale)
+            squeezed = avatar.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
             
             canvas.paste(squeezed, (x, y))
             canvas = Image.alpha_composite(canvas, hand)

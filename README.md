@@ -31,6 +31,7 @@ fork 自 https://github.com/mjy1113451/touch_head
 .petset 对齐 居中
 .petset 对齐 右下角
 .petset 缩放 1.2
+.petset 挤压 180
 ```
 
 说明：
@@ -39,6 +40,7 @@ fork 自 https://github.com/mjy1113451/touch_head
 - `指令` 用来修改触发词。
 - `对齐` 控制头像基准位置，可选 `居中` 或 `右下角`。
 - `缩放` 控制头像倍率，范围 `0.3 ~ 3.0`。
+- `挤压` 控制按压强度，范围 `100 ~ 300`。
 
 
 

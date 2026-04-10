@@ -54,5 +54,16 @@
       "max": 3.0,
       "step": 0.1
     }
+  },
+  "squish": {
+    "description": "挤压强度",
+    "type": "int",
+    "default": 125,
+    "hint": "对应原版 squish，范围 100 ~ 300",
+    "slider": {
+      "min": 100,
+      "max": 300,
+      "step": 1
+    }
   }
 }
